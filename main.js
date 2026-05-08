@@ -2,6 +2,18 @@ const electron = require('electron');
 const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog } = electron;
 const path = require('path');
 const fs = require('fs');
+const log = require('electron-log');
+
+// ========== 全局未捕获异常处理 ==========
+
+process.on('uncaughtException', (error) => {
+  log.error('未捕获的异常:', error.message, error.stack);
+  // 不退出进程，让 Electron 继续运行
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  log.error('未处理的 Promise 拒绝:', reason);
+});
 
 let mainWindow = null;
 let tray = null;
@@ -41,13 +53,13 @@ function loadReminderState() {
     if (typeof state.lastStandReminder === 'number' && typeof state.lastDrinkReminder === 'number') {
       return state;
     }
-    console.warn('[提醒系统] reminder-state.json 格式无效，重置计时');
+    log.warn('[提醒系统] reminder-state.json 格式无效，重置计时');
     return null;
   } catch (err) {
     if (err.code === 'ENOENT') {
-      console.log('[提醒系统] reminder-state.json 不存在，从当前时间开始计时');
+      log.info('[提醒系统] reminder-state.json 不存在，从当前时间开始计时');
     } else {
-      console.warn('[提醒系统] 读取 reminder-state.json 失败:', err.message);
+      log.warn('[提醒系统] 读取 reminder-state.json 失败:', err.message);
     }
     return null;
   }
@@ -60,9 +72,9 @@ function saveReminderState(state) {
   try {
     const filePath = getReminderStatePath();
     fs.writeFileSync(filePath, JSON.stringify(state, null, 2), 'utf-8');
-    console.log('[提醒系统] 已保存提醒状态');
+    log.info('[提醒系统] 已保存提醒状态');
   } catch (err) {
-    console.warn('[提醒系统] 保存 reminder-state.json 失败:', err.message);
+    log.warn('[提醒系统] 保存 reminder-state.json 失败:', err.message);
   }
 }
 
@@ -72,7 +84,7 @@ function saveReminderState(state) {
  */
 function sendReminder(type) {
   if (isMuted) {
-    console.log(`[提醒系统] 静音模式，跳过提醒: ${type}`);
+    log.info(`[提醒系统] 静音模式，跳过提醒: ${type}`);
     return;
   }
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -90,7 +102,7 @@ function sendReminder(type) {
   }
   saveReminderState(state);
 
-  console.log(`[提醒系统] 已发送提醒: ${type}`);
+  log.info(`[提醒系统] 已发送提醒: ${type}`);
 }
 
 /**
@@ -139,7 +151,7 @@ function startReminderTimer(type) {
     drinkTimer = timer;
   }
 
-  console.log(`[提醒系统] ${type === 'stand' ? '站立' : '喝水'}提醒将于 ${(remaining / 1000 / 60).toFixed(1)} 分钟后首次触发`);
+  log.info(`[提醒系统] ${type === 'stand' ? '站立' : '喝水'}提醒将于 ${(remaining / 1000 / 60).toFixed(1)} 分钟后首次触发`);
   return remaining;
 }
 
@@ -148,7 +160,7 @@ function startReminderTimer(type) {
  * 在 app.whenReady() 中调用
  */
 function initReminderSystem() {
-  console.log('[提醒系统] 初始化提醒定时器...');
+  log.info('[提醒系统] 初始化提醒定时器...');
 
   // 启动站立提醒定时器
   startReminderTimer('stand');
@@ -156,7 +168,7 @@ function initReminderSystem() {
   // 启动喝水提醒定时器
   startReminderTimer('drink');
 
-  console.log('[提醒系统] 提醒系统初始化完成');
+  log.info('[提醒系统] 提醒系统初始化完成');
 }
 
 /**
@@ -173,7 +185,7 @@ function clearReminderTimers() {
     clearInterval(drinkTimer);
     drinkTimer = null;
   }
-  console.log('[提醒系统] 定时器已清理');
+  log.info('[提醒系统] 定时器已清理');
 }
 
 function createWindow() {
@@ -205,12 +217,45 @@ function createWindow() {
     }
   });
 
+  log.info('[Main] 窗口已创建，位置:', x, y);
+
   // 失焦时强制保持最顶层（确保 alwaysOnTop 不因失焦而失效）
   mainWindow.on('blur', () => {
     mainWindow.setAlwaysOnTop(true, 'floating');
   });
 
   mainWindow.loadFile('index.html');
+
+  // ===== 渲染进程日志上报 =====
+  ipcMain.on('renderer-log', (_event, { level, message }) => {
+    if (level === 'error') {
+      log.error('[渲染进程]', message);
+    } else if (level === 'warn') {
+      log.warn('[渲染进程]', message);
+    } else {
+      log.info('[渲染进程]', message);
+    }
+  });
+
+  // === 渲染进程崩溃保护 ===
+  mainWindow.webContents.on('crashed', () => {
+    log.error('渲染进程崩溃，正在重新加载...');
+    mainWindow.loadFile('index.html');
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    log.error('渲染进程异常退出:', details.reason, details.exitCode);
+    if (details.reason === 'crashed' || details.reason === 'killed') {
+      log.info('正在重新加载渲染进程...');
+      mainWindow.loadFile('index.html');
+    }
+  });
+
+  // 窗口关闭时记录日志
+  mainWindow.on('closed', () => {
+    log.info('[Main] 窗口已关闭');
+    mainWindow = null;
+  });
 
   // 捕获渲染进程控制台日志并输出到终端
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
@@ -319,6 +364,8 @@ function createTray() {
   const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
   tray = new Tray(iconPath);
 
+  log.info('[Main] 系统托盘已创建');
+
   /**
    * 构建右键菜单
    * 每次调用重新构建，确保静音状态同步
@@ -407,10 +454,12 @@ function manualReminder(type) {
   const state = loadReminderState() || { lastStandReminder: timestamp, lastDrinkReminder: timestamp };
   state[key] = timestamp;
   saveReminderState(state);
-  console.log(`[提醒系统] 手动触发提醒: ${type}`);
+  log.info(`[提醒系统] 手动触发提醒: ${type}`);
 }
 
 app.whenReady().then(() => {
+  log.info('[Main] 应用启动');
+
   // 隐藏 Mac Dock 图标
   app.dock.hide();
 
@@ -456,6 +505,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  log.info('[Main] 应用即将退出，清理资源');
   clearReminderTimers();
 
   // 移除 IPC handle 处理器
@@ -469,5 +519,5 @@ app.on('before-quit', () => {
     tray = null;
   }
 
-  console.log('[Main] 应用退出，已清理所有资源');
+  log.info('[Main] 应用退出，已清理所有资源');
 });

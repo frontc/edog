@@ -42,9 +42,14 @@ export class Pet {
   /**
    * 每帧更新
    * 先更新状态机（可能触发自动状态切换），再更新动画帧
+   * 安全检查：如果动画器未加载且非后备模式，跳过更新
    * @param {number} dt - 距上一帧的时间间隔（秒）
    */
   update(dt) {
+    // 安全检查：动画器未就绪时跳过更新
+    if (!this._animator) return;
+    if (!this._animator.loaded && !this._animator._fallbackMode) return;
+
     this._fsm.update(dt);
     this._animator.update(dt);
   }
@@ -52,8 +57,14 @@ export class Pet {
   /**
    * 绘制当前帧
    * 根据 direction 决定是否水平翻转
+   * 安全检查：如果动画器或精灵图未就绪，跳过渲染
    */
   render() {
+    // 安全检查：动画器不存在时跳过
+    if (!this._animator) return;
+    // 如果既没有精灵图也没有后备模式，跳过渲染
+    if (!this._animator.loaded && !this._animator._fallbackMode) return;
+
     const flipX = (this.direction === 'left');
     this._animator.render(this.x, this.y, flipX);
   }

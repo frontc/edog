@@ -3,6 +3,32 @@
  * 渲染进程入口文件
  * 负责 Canvas 初始化、宠物实例创建、鼠标交互集成、行为管理和游戏循环
  */
+
+// ========== 渲染进程全局异常处理 ==========
+
+window.onerror = (message, source, lineno, colno, error) => {
+  console.error('[渲染进程] 全局错误:', message, error?.stack);
+  // 尝试通过 IPC 发送到主进程日志
+  try {
+    if (window.electronAPI && window.electronAPI.sendLog) {
+      window.electronAPI.sendLog('error', `全局错误: ${message} ${error?.stack || ''}`);
+    }
+  } catch (_) {
+    // 忽略 IPC 发送异常
+  }
+};
+
+window.onunhandledrejection = (event) => {
+  console.error('[渲染进程] 未处理的 Promise 拒绝:', event.reason);
+  try {
+    if (window.electronAPI && window.electronAPI.sendLog) {
+      window.electronAPI.sendLog('error', `未处理的 Promise 拒绝: ${event.reason}`);
+    }
+  } catch (_) {
+    // 忽略 IPC 发送异常
+  }
+};
+
 import { Pet } from './Pet.js';
 import { Interaction } from './Interaction.js';
 import { BehaviorManager } from './BehaviorManager.js';
@@ -120,10 +146,14 @@ function gameLoop(timestamp) {
   frameAccumulator += dt;
 
   // === 始终更新逻辑（不跳过状态机和动画的 delta time） ===
-  pet.update(dt);
-  interaction.update(dt);
-  behaviorManager.update(dt);
-  speechBubble.update(dt);
+  try {
+    pet.update(dt);
+    interaction.update(dt);
+    behaviorManager.update(dt);
+    speechBubble.update(dt);
+  } catch (err) {
+    console.error('[gameLoop] 更新异常:', err);
+  }
 
   // === 条件渲染：只在需要时绘制 ===
   const shouldRender = frameAccumulator >= frameInterval || stateChanged || speechBubble.isVisible;

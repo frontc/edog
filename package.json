@@ -51,5 +51,8 @@
   "bugs": {
     "url": "https://github.com/frontc/edog/issues"
   },
-  "homepage": "https://github.com/frontc/edog#readme"
+  "homepage": "https://github.com/frontc/edog#readme",
+  "dependencies": {
+    "electron-log": "^5.4.3"
+  }
 }

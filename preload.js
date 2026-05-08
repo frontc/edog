@@ -67,4 +67,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
    * @param {boolean} ignore - true 时鼠标事件穿透窗口，false 时恢复正常交互
    */
   setIgnoreMouseEvents: (ignore) => ipcRenderer.send('set-ignore-mouse-events', ignore),
+
+  /**
+   * 发送日志到主进程（用于渲染进程全局异常上报）
+   * @param {'info'|'warn'|'error'} level - 日志级别
+   * @param {string} message - 日志消息
+   */
+  sendLog: (level, message) => ipcRenderer.send('renderer-log', { level, message }),
 });
