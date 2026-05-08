@@ -58,6 +58,9 @@ window.electronAPI.onReminder((type) => {
   handleReminder(type);
 });
 
+// ---- 状态变化标记（用于脏矩形跳过渲染） ----
+let stateChanged = false;
+
 // 监听托盘点击事件（打招呼动画）
 window.electronAPI.onTrayClick((data) => {
   if (data && data.action === 'greet') {
@@ -70,9 +73,10 @@ window.electronAPI.onTrayClick((data) => {
   }
 });
 
-// 监听状态变化（用于调试）
+// 监听状态变化（用于调试 + 脏标记）
 pet._fsm.on('stateChange', ({ from, to }) => {
   console.log(`[StateMachine] ${from ?? '(null)'} → ${to}`);
+  stateChanged = true;
 });
 
 /**
@@ -93,34 +97,47 @@ async function init() {
 
 let lastTime = performance.now();
 
+// ---- 可变帧率控制 ----
+const FPS_IDLE = 4;
+const FPS_ACTIVE = 30;
+let frameAccumulator = 0;
+
 /**
  * 游戏主循环
  * @param {DOMHighResTimeStamp} timestamp - requestAnimationFrame 提供的时间戳
  */
 function gameLoop(timestamp) {
-  const dt = (timestamp - lastTime) / 1000; // 转为秒
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.1); // 转为秒，上限 100ms
   lastTime = timestamp;
 
-  // 更新宠物（内部驱动状态机 + 动画帧）
+  // === 可变帧率：根据状态决定目标帧率 ===
+  let targetFps = FPS_IDLE; // 默认 IDLE 4fps
+  const state = pet._fsm.currentState;
+  if (state !== STATES.IDLE || speechBubble.isVisible) {
+    targetFps = FPS_ACTIVE; // WALKING/POUNCING/LIFTED/PETTED/POKED 或气泡可见时 30fps
+  }
+  const frameInterval = 1 / targetFps;
+  frameAccumulator += dt;
+
+  // === 始终更新逻辑（不跳过状态机和动画的 delta time） ===
   pet.update(dt);
-
-  // 更新交互逻辑（释放回中动画、LIFTED 摇摆效果等）
   interaction.update(dt);
-
-  // 更新行为管理器（散步逻辑、扑击等）
   behaviorManager.update(dt);
-
-  // 更新对话气泡
   speechBubble.update(dt);
 
-  // 清空 Canvas（透明背景，适配 Electron 透明窗口）
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  // === 条件渲染：只在需要时绘制 ===
+  const shouldRender = frameAccumulator >= frameInterval || stateChanged || speechBubble.isVisible;
+  if (shouldRender) {
+    frameAccumulator = 0;
 
-  // 渲染宠物当前帧
-  pet.render();
-
-  // 渲染对话气泡（在宠物之上）
-  speechBubble.render(pet.x, pet.y);
+    // 脏矩形检测：_animator.dirty 或状态改变时才清屏重绘
+    if (stateChanged || pet._animator.dirty || speechBubble.isVisible) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      pet.render();
+      speechBubble.render(pet.x, pet.y);
+    }
+    stateChanged = false;
+  }
 
   // 继续下一帧
   requestAnimationFrame(gameLoop);

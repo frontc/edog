@@ -38,6 +38,9 @@ export class BehaviorManager {
     // ---- 多屏幕缓存 ----
     this._screens = null;            // 所有屏幕信息数组，由 _initScreens() 填充
 
+    // ---- 销毁标记（内存泄漏防护） ----
+    this._destroyed = false;
+
     // ---- 空闲微动作（预留，步骤 6.1 实现） ----
     this._idleTimer = 0;
 
@@ -61,11 +64,11 @@ export class BehaviorManager {
    */
   pause() {
     console.log('[BehaviorManager] pause: 暂停散步调度');
-    this._cancelScheduledWalk();
-    // 如果正在散步，也取消当前散步
+    // 如果正在散步，取消散步并清除步行定时器（跳过重新调度）
     if (this._walkActive) {
-      this._cancelWalk('pause');
+      this._cancelWalk('pause', true);
     }
+    this._cancelScheduledWalk();
   }
 
   /**
@@ -90,6 +93,9 @@ export class BehaviorManager {
    * @param {number} dt - 距上一帧的时间间隔（秒）
    */
   update(dt) {
+    // 如果已销毁，跳过所有更新逻辑
+    if (this._destroyed) return;
+
     if (this._walkActive) {
       this._updateWalk(dt);
     }
@@ -103,18 +109,28 @@ export class BehaviorManager {
   }
 
   /**
-   * 销毁：清理定时器和事件监听
+   * 销毁：清理定时器、事件监听和内部状态引用
    */
   destroy() {
+    this._destroyed = true;
+
     this._cancelScheduledWalk();
     this._walkActive = false;
     this._walkDirection = 0;
-    this._pouncePendingResume = false;
     this._pounceScheduled = false;
+    this._pouncePendingResume = false;
+    this._pounceTimer = 0;
+    this._pounceDelay = 0;
+
+    // 清除事件监听
     if (this._boundOnStateChange) {
       this._pet._fsm.off('stateChange', this._boundOnStateChange);
       this._boundOnStateChange = null;
     }
+
+    // 清除内部引用
+    this._pet = null;
+    this._screens = null;
   }
 
   // ========== 内部方法：调度 ==========
@@ -430,8 +446,9 @@ export class BehaviorManager {
   /**
    * 取消散步（被打断时调用）
    * @param {string} reason - 取消原因（用于日志）
+   * @param {boolean} [skipReschedule=false] - 是否跳过重新调度（pause 时=true）
    */
-  _cancelWalk(reason) {
+  _cancelWalk(reason, skipReschedule = false) {
     if (!this._walkActive) return;
 
     console.log(`[BehaviorManager] 散步取消: ${reason}`);
@@ -440,7 +457,9 @@ export class BehaviorManager {
     this._pounceScheduled = false;
     this._pouncePendingResume = false;
 
-    // 调度下一次散步
-    this._scheduleNextWalk();
+    if (!skipReschedule) {
+      // 调度下一次散步
+      this._scheduleNextWalk();
+    }
   }
 }

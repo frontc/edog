@@ -457,9 +457,17 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   clearReminderTimers();
+
+  // 移除 IPC handle 处理器
+  ipcMain.removeHandler('get-screen-size');
+  ipcMain.removeHandler('get-window-position');
+  ipcMain.removeHandler('get-all-screens');
+
   // 清理托盘
   if (tray) {
     tray.destroy();
     tray = null;
   }
+
+  console.log('[Main] 应用退出，已清理所有资源');
 });

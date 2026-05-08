@@ -22,6 +22,9 @@ export class SpriteAnimator {
     this.frameIndex = 0;          // 当前帧在该动画帧数组中的索引
     this.timer = 0;               // 累计时间（秒）
     this.playing = true;          // 动画是否正在播放
+
+    // ---- 脏标记（用于性能优化） ----
+    this.dirty = false;           // 动画是否发生变化，需要重新渲染
   }
 
   /**
@@ -60,6 +63,7 @@ export class SpriteAnimator {
     this.frameIndex = 0;
     this.timer = 0;
     this.playing = true;
+    this.dirty = true; // 动画切换，标记需要重新渲染
   }
 
   /**
@@ -93,6 +97,7 @@ export class SpriteAnimator {
           break;
         }
       }
+      this.dirty = true; // 帧切换，标记需要重新渲染
     }
   }
 
@@ -135,6 +140,9 @@ export class SpriteAnimator {
     }
 
     ctx.restore();
+
+    // 渲染完成，重置脏标记
+    this.dirty = false;
   }
 
   /**
