@@ -6,7 +6,8 @@
 import { Pet } from './Pet.js';
 import { Interaction } from './Interaction.js';
 import { BehaviorManager } from './BehaviorManager.js';
-import { SPRITESHEET_PATH } from './const.js';
+import { SpeechBubble } from './SpeechBubble.js';
+import { SPRITESHEET_PATH, REMINDERS } from './const.js';
 
 // 获取 Canvas 元素和 2D 上下文
 const canvas = document.getElementById('gameCanvas');
@@ -24,6 +25,39 @@ interaction.init();
 
 // 创建行为管理器（管理散步、扑击等自发行为）
 const behaviorManager = new BehaviorManager(pet);
+
+// 创建对话气泡（用于提醒系统）
+const speechBubble = new SpeechBubble(ctx);
+
+// ========== 提醒系统集成 ==========
+
+/**
+ * 处理提醒事件
+ * @param {'stand'|'drink'} type - 提醒类型
+ */
+function handleReminder(type) {
+  const text = type === REMINDERS.STAND ? REMINDERS.STAND_TEXT : REMINDERS.DRINK_TEXT;
+  console.log(`[提醒系统] 收到提醒: ${type} -> "${text}"`);
+
+  // 1. 暂停 BehaviorManager 的散步调度
+  behaviorManager.pause();
+
+  // 2. 让宠物面向屏幕中央（direction 朝屏幕内，即 'right'）
+  pet.direction = 'right';
+
+  // 3. 显示对应文字的气泡，10 秒后自动消失并恢复行为
+  speechBubble.show(text, REMINDERS.BUBBLE_DURATION, () => {
+    // 5. 气泡消失后恢复 BehaviorManager
+    behaviorManager.resume();
+    console.log('[提醒系统] 气泡消失，恢复正常行为');
+  });
+}
+
+// 监听主进程提醒事件
+window.electronAPI.onReminder((type) => {
+  handleReminder(type);
+});
+
 
 // 监听状态变化（用于调试）
 pet._fsm.on('stateChange', ({ from, to }) => {
@@ -65,11 +99,17 @@ function gameLoop(timestamp) {
   // 更新行为管理器（散步逻辑、扑击等）
   behaviorManager.update(dt);
 
+  // 更新对话气泡
+  speechBubble.update(dt);
+
   // 清空 Canvas（透明背景，适配 Electron 透明窗口）
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
   // 渲染宠物当前帧
   pet.render();
+
+  // 渲染对话气泡（在宠物之上）
+  speechBubble.render(pet.x, pet.y);
 
   // 继续下一帧
   requestAnimationFrame(gameLoop);

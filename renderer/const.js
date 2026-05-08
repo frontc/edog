@@ -30,3 +30,12 @@ export const STATES = {
   PETTED: 'petted',
   POKED: 'poked',
 };
+
+// 提醒相关常量（步骤 6.1）
+export const REMINDERS = {
+  STAND: 'stand',
+  DRINK: 'drink',
+  STAND_TEXT: '该站起来活动一下啦！🐕',
+  DRINK_TEXT: '主人记得喝水哦～💧',
+  BUBBLE_DURATION: 10000, // 气泡显示时长 ms
+};

@@ -56,6 +56,36 @@ export class BehaviorManager {
   // ========== 公开方法 ==========
 
   /**
+   * 暂停散步调度
+   * 清除当前定时器，暂不重新调度
+   * 用于提醒期间暂停宠物自动行为
+   */
+  pause() {
+    console.log('[BehaviorManager] pause: 暂停散步调度');
+    this._cancelScheduledWalk();
+    // 如果正在散步，也取消当前散步
+    if (this._walkActive) {
+      this._cancelWalk('pause');
+    }
+  }
+
+  /**
+   * 恢复散步调度
+   * 重新 scheduleNextWalk
+   * 提醒结束后恢复宠物自动行为
+   */
+  resume() {
+    console.log('[BehaviorManager] resume: 恢复散步调度');
+    // 如果当前是 IDLE 状态，直接调度下一次散步
+    if (this._pet._fsm.currentState === STATES.IDLE) {
+      this._scheduleNextWalk();
+    }
+    // 非 IDLE 状态（如 LIFTED/PETTED）不需要立即调度，
+    // 等到状态切回 IDLE 时自然会触发调度
+  }
+
+
+  /**
    * 每帧更新
    * 在游戏主循环中调用
    * @param {number} dt - 距上一帧的时间间隔（秒）
