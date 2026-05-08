@@ -36,7 +36,9 @@
   },
   "devDependencies": {
     "electron": "^33.4.11",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "pngjs": "^7.0.0",
+    "sharp": "^0.34.5"
   },
   "repository": {
     "type": "git",
