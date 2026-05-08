@@ -34,6 +34,12 @@ function createWindow() {
 
   mainWindow.loadFile('index.html');
 
+  // 捕获渲染进程控制台日志并输出到终端
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const prefix = ['', '[INFO]', '[WARN]', '[ERROR]', '[DEBUG]'];
+    console.log(`[渲染进程]${prefix[level] || ''} ${message}`);
+  });
+
   // 开发环境可开启 DevTools（注释掉以保持窗口纯净）
   // mainWindow.webContents.openDevTools();
 }

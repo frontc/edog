@@ -20,3 +20,13 @@ export const FRAME_HEIGHT = 200;
 
 // 精灵图路径
 export const SPRITESHEET_PATH = 'assets/spritesheet.png';
+
+// 状态常量
+export const STATES = {
+  IDLE: 'idle',
+  WALKING: 'walking',
+  POUNCING: 'pouncing',
+  LIFTED: 'lifted',
+  PETTED: 'petted',
+  POKED: 'poked',
+};
