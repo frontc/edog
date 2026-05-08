@@ -35,6 +35,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getScreenSize: () => ipcRenderer.invoke('get-screen-size'),
 
   /**
+   * 获取所有屏幕的 bounds 和 workArea 信息
+   * @returns {Promise<Array<{ x, y, width, height, workArea: { x, y, width, height } }>>}
+   */
+  getAllScreens: () => ipcRenderer.invoke('get-all-screens'),
+
+  /**
    * 获取当前窗口位置
    * @returns {Promise<{ x: number, y: number }>}
    */

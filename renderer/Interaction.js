@@ -319,6 +319,9 @@ export class Interaction {
       this._isDragging = false;
       this._pet.setState(STATES.IDLE);
 
+      // 拖拽落点边界检测：确保窗口不超出屏幕可见区域
+      this._clampWindowToScreen();
+
       // 启动回中弹跳动画
       this._releaseStartX = this._pet.x;
       this._releaseStartY = this._pet.y;
@@ -370,6 +373,41 @@ export class Interaction {
   _tryMoveWindow(dx, dy) {
     if (typeof this._electronAPI.moveWindow === 'function') {
       this._electronAPI.moveWindow(dx, dy);
+    }
+  }
+
+  /**
+   * 拖拽释放后检测窗口是否超出屏幕边界
+   * 若超出，将窗口钳制到最近屏幕的可见区域
+   */
+  async _clampWindowToScreen() {
+    try {
+      const screens = await this._electronAPI.getAllScreens();
+      const pos = await this._electronAPI.getWindowPosition();
+      if (!screens || screens.length === 0 || !pos) return;
+
+      const W = 200;
+      const H = 200;
+
+      // 检查窗口中心位于哪个屏幕内
+      const currentScreen = screens.find(s =>
+        pos.x + W / 2 >= s.x && pos.x + W / 2 < s.x + s.width &&
+        pos.y + H / 2 >= s.y && pos.y + H / 2 < s.y + s.height
+      );
+
+      const screen = currentScreen || screens[0];
+      const wa = screen.workArea;
+
+      // 钳制窗口位置到可见区域
+      const clampedX = Math.max(wa.x, Math.min(pos.x, wa.x + wa.width - W));
+      const clampedY = Math.max(wa.y, Math.min(pos.y, wa.y + wa.height - H));
+
+      if (clampedX !== pos.x || clampedY !== pos.y) {
+        console.log(`[Interaction] 窗口越界钳制: (${pos.x}, ${pos.y}) -> (${clampedX}, ${clampedY})`);
+        this._electronAPI.moveWindowTo(clampedX, clampedY);
+      }
+    } catch (e) {
+      console.warn('[Interaction] 边界检测失败:', e.message);
     }
   }
 }

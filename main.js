@@ -205,6 +205,11 @@ function createWindow() {
     }
   });
 
+  // 失焦时强制保持最顶层（确保 alwaysOnTop 不因失焦而失效）
+  mainWindow.on('blur', () => {
+    mainWindow.setAlwaysOnTop(true, 'floating');
+  });
+
   mainWindow.loadFile('index.html');
 
   // 捕获渲染进程控制台日志并输出到终端
@@ -270,6 +275,40 @@ function createWindow() {
       mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
     }
   });
+
+  /**
+   * get-all-screens：返回所有显示器的 bounds 和 workArea
+   * 用于 BehaviorManager 跨屏随机散步目标
+   */
+  ipcMain.handle('get-all-screens', () => {
+    const displays = screen.getAllDisplays();
+    return displays.map(d => ({
+      x: d.bounds.x,
+      y: d.bounds.y,
+      width: d.bounds.width,
+      height: d.bounds.height,
+      workArea: {
+        x: d.workArea.x,
+        y: d.workArea.y,
+        width: d.workArea.width,
+        height: d.workArea.height
+      }
+    }));
+  });
+}
+
+/**
+ * 获取包含指定坐标点的屏幕信息
+ * @param {number} x - 窗口 X 坐标
+ * @param {number} y - 窗口 Y 坐标
+ * @returns {Electron.Display | null}
+ */
+function getScreenContaining(x, y) {
+  const displays = screen.getAllDisplays();
+  return displays.find(d =>
+    x >= d.bounds.x && x < d.bounds.x + d.bounds.width &&
+    y >= d.bounds.y && y < d.bounds.y + d.bounds.height
+  ) || null;
 }
 
 /**
@@ -376,6 +415,26 @@ app.whenReady().then(() => {
   app.dock.hide();
 
   createWindow();
+
+  // 监听屏幕显示变化（扩展显示器插拔、分辨率变更等）
+  screen.on('display-metrics-changed', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [wx, wy] = mainWindow.getPosition();
+      const currentScreen = getScreenContaining(wx, wy);
+      if (!currentScreen) {
+        // 窗口不在任何屏幕内，移回主屏幕右下角
+        const primary = screen.getPrimaryDisplay();
+        const { x: sx, y: sy, width: sw, height: sh } = primary.workArea;
+        mainWindow.setPosition(sx + sw - 200, sy + sh - 200);
+      } else {
+        // 确保窗口完全在当前屏幕内（clamp）
+        const wa = currentScreen.workArea;
+        const clampedX = Math.max(wa.x, Math.min(wx, wa.x + wa.width - 200));
+        const clampedY = Math.max(wa.y, Math.min(wy, wa.y + wa.height - 200));
+        mainWindow.setPosition(Math.round(clampedX), Math.round(clampedY));
+      }
+    }
+  });
 
   // 创建系统托盘（必须在 app.whenReady 之后）
   createTray();

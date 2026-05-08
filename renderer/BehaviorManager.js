@@ -35,15 +35,14 @@ export class BehaviorManager {
     // ---- 调度定时器 ----
     this._walkTimer = null;          // setTimeout 句柄
 
-    // ---- 屏幕尺寸缓存 ----
-    this._screenWidth = 0;
-    this._screenHeight = 0;
+    // ---- 多屏幕缓存 ----
+    this._screens = null;            // 所有屏幕信息数组，由 _initScreens() 填充
 
     // ---- 空闲微动作（预留，步骤 6.1 实现） ----
     this._idleTimer = 0;
 
-    // 异步初始化屏幕尺寸
-    this._initScreenSize();
+    // 异步初始化屏幕信息
+    this._initScreens();
 
     // 首次调度散步
     this._scheduleNextWalk();
@@ -121,20 +120,30 @@ export class BehaviorManager {
   // ========== 内部方法：调度 ==========
 
   /**
-   * 初始化屏幕尺寸
-   * 异步查询主屏幕 workArea 尺寸，缓存到本地
+   * 初始化所有屏幕信息
+   * 异步查询所有显示器的 bounds 和 workArea，缓存到本地
+   * 若获取失败，回退到主屏幕 single-screen 模式
    */
-  async _initScreenSize() {
+  async _initScreens() {
     try {
-      const size = await window.electronAPI.getScreenSize();
-      this._screenWidth = size.width;
-      this._screenHeight = size.height;
-      console.log(`[BehaviorManager] 屏幕尺寸: ${this._screenWidth}×${this._screenHeight}`);
+      if (window.electronAPI && window.electronAPI.getAllScreens) {
+        this._screens = await window.electronAPI.getAllScreens();
+      } else {
+        // 降级：使用 getScreenSize 模拟单屏幕
+        const size = await window.electronAPI.getScreenSize();
+        this._screens = [{
+          x: 0, y: 0, width: size.width, height: size.height,
+          workArea: { x: 0, y: 0, width: size.width, height: size.height }
+        }];
+      }
+      console.log(`[BehaviorManager] 屏幕数量: ${this._screens.length}`);
     } catch (e) {
-      console.warn('[BehaviorManager] 获取屏幕尺寸失败:', e.message);
+      console.warn('[BehaviorManager] 获取屏幕信息失败:', e.message);
       // 回退默认值（1920×1080）
-      this._screenWidth = 1920;
-      this._screenHeight = 1080;
+      this._screens = [{
+        x: 0, y: 0, width: 1920, height: 1080,
+        workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+      }];
     }
   }
 
@@ -186,8 +195,26 @@ export class BehaviorManager {
       return;
     }
 
+    // 边界检测：若窗口当前位置超出所有屏幕可见区域，回弹到主屏幕右下角
+    if (this._screens && this._screens.length > 0) {
+      const isOutOfBounds = !this._screens.some(s =>
+        this._windowX >= s.workArea.x &&
+        this._windowX < s.workArea.x + s.workArea.width - 200 &&
+        this._windowY >= s.workArea.y &&
+        this._windowY < s.workArea.y + s.workArea.height - 200
+      );
+      if (isOutOfBounds) {
+        // 回弹到主屏幕（第一个屏幕）右下角
+        const primaryScreen = this._screens[0];
+        this._windowX = primaryScreen.workArea.x + primaryScreen.workArea.width - 200;
+        this._windowY = primaryScreen.workArea.y + primaryScreen.workArea.height - 200;
+        window.electronAPI.moveWindowTo(this._windowX, this._windowY);
+        console.log('[BehaviorManager] 窗口越界，回弹到主屏幕右下角');
+      }
+    }
+
     // 生成随机目标（距屏幕边缘至少 100px）
-    const target = this._getRandomTarget();
+    const target = await this._getRandomTarget();
     this._walkTargetX = target.x;
     this._walkTargetY = target.y;
     this._walkSpeed = 30 + Math.random() * 30; // 30 ~ 60 px/s
@@ -214,16 +241,33 @@ export class BehaviorManager {
   }
 
   /**
-   * 生成随机目标位置
-   * 距屏幕边缘至少 100px，确保窗口不会移出可视区域
+   * 生成随机目标位置（跨屏幕）
+   * 从所有屏幕中随机选择一个屏幕，再从该屏幕的 workArea 中随机生成目标（距边缘 100px）
+   * 确保窗口不会移出可视区域
    * @returns {{ x: number, y: number }}
    */
-  _getRandomTarget() {
+  async _getRandomTarget() {
+    let screens = this._screens;
+    if (!screens || screens.length === 0) {
+      try {
+        screens = await window.electronAPI.getAllScreens();
+        this._screens = screens;
+      } catch (e) {
+        console.warn('[BehaviorManager] 获取屏幕列表失败，回退单屏幕:', e.message);
+        screens = [{
+          x: 0, y: 0, width: 1920, height: 1080,
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+        }];
+      }
+    }
+    // 随机选择一个屏幕
+    const screen = screens[Math.floor(Math.random() * screens.length)];
+    const wa = screen.workArea;
     const margin = 100;
-    const minX = margin;
-    const minY = margin;
-    const maxX = Math.max(minX + 100, this._screenWidth - margin);
-    const maxY = Math.max(minY + 100, this._screenHeight - margin);
+    const minX = wa.x + margin;
+    const minY = wa.y + margin;
+    const maxX = Math.max(minX + 100, wa.x + wa.width - margin);
+    const maxY = Math.max(minY + 100, wa.y + wa.height - margin);
 
     return {
       x: minX + Math.random() * (maxX - minX),
