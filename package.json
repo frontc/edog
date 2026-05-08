@@ -4,8 +4,8 @@
   "description": "像素边牧桌面电子宠物",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron ."
+    "start": "ELECTRON_RUN_AS_NODE= electron .",
+    "dev": "ELECTRON_RUN_AS_NODE= electron ."
   },
   "devDependencies": {
     "electron": "^33.4.11",
