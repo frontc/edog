@@ -1,0 +1,25 @@
+{
+  "name": "edog",
+  "version": "1.0.0",
+  "description": "像素边牧桌面电子宠物",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^24.13.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frontc/edog.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/frontc/edog/issues"
+  },
+  "homepage": "https://github.com/frontc/edog#readme"
+}

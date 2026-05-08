@@ -1,0 +1,80 @@
+# ─── Node.js / Dependencies ───────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+package-lock.json
+
+# ─── Electron Build Output ──────────────────────────────────────────────────
+# electron-builder 构建产物（macOS dmg/zip、asar 等）
+dist/
+release/
+out/
+*.asar
+*.dmg
+*.zip
+*.app
+# 如果使用 electron-builder 的 electron-updater 自动更新
+latest-mac.yml
+
+# ─── macOS System Files ─────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# ─── IDE / Editor ───────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
+*.sublime*
+
+# ─── Environment & Config ───────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+# .npmrc 可能包含私有 npm registry 配置，但项目中已有，根据情况决定是否提交
+# .npmrc
+
+# ─── OS / General ───────────────────────────────────────────────────────────
+*.log
+*.pid
+*.seed
+*.pid.lock
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ─── TypeScript / JavaScript Build ──────────────────────────────────────────
+# 如果使用 TypeScript 编译输出
+lib/
+build/
+tsconfig.tsbuildinfo
+
+# ─── Testing ─────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ─── Electron Specific ──────────────────────────────────────────────────────
+# Electron 自动更新缓存
+# electron-builder 的分布式构建缓存
+.cache/

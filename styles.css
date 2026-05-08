@@ -1,0 +1,24 @@
+/* 重置页面边距和内边距 */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+  width: 200px;
+  height: 200px;
+}
+
+/* Canvas 像素渲染锐利 */
+canvas {
+  display: block;
+  margin: 0;
+  padding: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
