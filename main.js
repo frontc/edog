@@ -210,6 +210,7 @@ function createWindow() {
     transparent: true,
     alwaysOnTop: true,
     hasShadow: false,
+    resizable: false,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -456,6 +457,9 @@ function manualReminder(type) {
   saveReminderState(state);
   log.info(`[提醒系统] 手动触发提醒: ${type}`);
 }
+
+// 设置应用名称（影响菜单栏和 Dock 显示）
+app.setName('像素边牧');
 
 app.whenReady().then(() => {
   log.info('[Main] 应用启动');

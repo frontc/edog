@@ -7,8 +7,10 @@
     "start": "ELECTRON_RUN_AS_NODE= electron .",
     "dev": "ELECTRON_RUN_AS_NODE= electron .",
     "generate-tray-icon": "node scripts/generate-tray-icon.js",
-    "build": "electron-builder",
-    "dist": "electron-builder",
+    "generate-app-icon": "node scripts/generate-app-icon.js",
+    "build": "npm run generate-app-icon && electron-builder",
+    "build:mac": "npm run generate-app-icon && electron-builder --mac",
+    "dist": "npm run build",
     "dist:mac": "electron-builder --mac"
   },
   "build": {
@@ -18,11 +20,13 @@
       "output": "release"
     },
     "mac": {
+      "icon": "assets/icon.icns",
       "target": [
         "dmg",
         "zip"
       ],
       "hardenedRuntime": true,
+      "gatekeeperAssess": false,
       "category": "public.app-category.entertainment",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
