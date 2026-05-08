@@ -48,7 +48,17 @@ export class Interaction {
   constructor(pet, canvas, electronAPI) {
     this._pet = pet;
     this._canvas = canvas;
+    this._ctx = canvas.getContext('2d');  // 新增：Canvas 2D 上下文引用（用于像素读取）
     this._electronAPI = electronAPI || {};
+
+    // ---- 鼠标位置（用于穿透检测和 hitTest） ----
+    this._mouseX = canvas.width / 2;
+    this._mouseY = canvas.height / 2;
+
+    // ---- Alpha 穿透检测相关 ----
+    this._ignoreMouse = true;        // 当前穿透状态（初始默认穿透）
+    this._lastAlphaCheck = 0;        // 上次检测时间戳
+    this._alphaCheckInterval = 80;   // 检测间隔 80ms（约 12.5 次/秒）
 
     // ---- 拖动状态 ----
     this._isDragging = false;
@@ -91,6 +101,12 @@ export class Interaction {
     this._canvas.addEventListener('mousedown', this._boundMouseDown);
     window.addEventListener('mousemove', this._boundMouseMove);
     window.addEventListener('mouseup', this._boundMouseUp);
+
+    // 初始状态：开启穿透（窗口默认穿透，等待鼠标移动到宠物上时关闭）
+    this._ignoreMouse = true;
+    if (this._electronAPI && this._electronAPI.setIgnoreMouseEvents) {
+      this._electronAPI.setIgnoreMouseEvents(true);
+    }
   }
 
   /**
@@ -137,6 +153,41 @@ export class Interaction {
       this._pet.moveTo(this._dragTargetX + swayX, this._dragTargetY + swayY);
     } else {
       this._swayTimer = 0;
+      // 穿透检测（非拖拽状态时进行检测，避免被拖动时误切换穿透）
+      this._updateMouseTransparency();
+    }
+  }
+
+  /**
+   * Alpha 通道穿透检测
+   * 读取鼠标所在像素的 Alpha 值，透明时开启窗口穿透（鼠标事件透传到底层窗口）
+   * 不透明时关闭穿透（鼠标与宠物交互）
+   * 仅在非拖拽状态下检测
+   */
+  _updateMouseTransparency() {
+    // 节流：限制检测频率
+    const now = performance.now();
+    if (now - this._lastAlphaCheck < this._alphaCheckInterval) return;
+    this._lastAlphaCheck = now;
+
+    // 读取鼠标所在像素的 Alpha 通道
+    try {
+      const pixel = this._ctx.getImageData(this._mouseX, this._mouseY, 1, 1);
+      const alpha = pixel.data[3]; // 0 = 透明, 255 = 完全不透明
+
+      // 判定是否需要穿透
+      const shouldIgnore = (alpha === 0);
+
+      // 状态缓存：只在穿透状态改变时发送 IPC
+      if (shouldIgnore !== this._ignoreMouse) {
+        this._ignoreMouse = shouldIgnore;
+        if (this._electronAPI && this._electronAPI.setIgnoreMouseEvents) {
+          this._electronAPI.setIgnoreMouseEvents(shouldIgnore);
+        }
+      }
+    } catch (e) {
+      // getImageData 可能因跨域等失败，静默忽略
+      console.warn('[穿透检测] getImageData 失败:', e.message);
     }
   }
 
@@ -181,6 +232,10 @@ export class Interaction {
    */
   _onMouseMove(e) {
     const { mx, my } = this._getCanvasCoords(e);
+
+    // 持久化鼠标坐标（供穿透检测使用）
+    this._mouseX = mx;
+    this._mouseY = my;
 
     // ---- 拖拽模式 ----
     if (this._isDragging) {
