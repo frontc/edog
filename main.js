@@ -1,5 +1,5 @@
 const electron = require('electron');
-const { app, BrowserWindow, screen, ipcMain, Notification } = electron;
+const { app, BrowserWindow, screen, ipcMain } = electron;
 const path = require('path');
 const fs = require('fs');
 
@@ -10,6 +10,9 @@ let mainWindow = null;
 const REMINDER_INTERVALS = {
   STAND: 60 * 60 * 1000,   // 60 分钟（3600000ms）
   DRINK: 120 * 60 * 1000,  // 120 分钟（7200000ms）
+  // STAND: 10 * 1000,   // 10 秒
+  // DRINK: 20 * 1000,   // 20 秒
+
 };
 
 const REMINDER_STATE_FILE = 'reminder-state.json';
@@ -67,23 +70,6 @@ function saveReminderState(state) {
  */
 function sendReminder(type) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-
-  // Electron Notification 系统通知
-  if (Notification.isSupported()) {
-    const titles = {
-      stand: '站起来活动一下 🐕',
-      drink: '该喝水啦 💧',
-    };
-    const bodies = {
-      stand: '你已经坐了很久了，站起来走走吧！',
-      drink: '记得多喝水，保持身体健康哦～',
-    };
-    const notification = new Notification({
-      title: titles[type],
-      body: bodies[type],
-    });
-    notification.show();
-  }
 
   // 通过 IPC 通知渲染进程显示气泡
   mainWindow.webContents.send('reminder', type);

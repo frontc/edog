@@ -7,7 +7,9 @@
  *   x = pet.x + 100 - bubbleWidth / 2
  *   y = pet.y - bubbleHeight - 15
  *
- * 气泡宽 160px，高度根据文字自动换行计算
+ * 气泡宽 160px，高度根据文字自动换行动态计算
+ *
+ * 动画状态机：ENTERING → BOUNCING → IDLE → EXITING → HIDDEN
  */
 export class SpeechBubble {
   constructor(ctx) {
@@ -15,14 +17,20 @@ export class SpeechBubble {
 
     // ---- 气泡尺寸 ----
     this._bubbleWidth = 160;          // 固定宽度
-    this._bubbleHeight = 0;           // 根据文字动态计算
 
     // ---- 内边距 ----
-    this._paddingX = 12;
-    this._paddingY = 8;
+    this._paddingTop = 12;
+    this._paddingBottom = 12;
+    this._paddingLeft = 10;
+    this._paddingRight = 10;
 
     // ---- 字体 ----
-    this._font = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+    this._font = 'bold 11px "Courier New", monospace';
+    this._lineHeight = 16;
+
+    // ---- 三角形指示器 ----
+    this._triangleWidth = 12;
+    this._triangleHeight = 8;
 
     // ---- 文字 ----
     this._text = '';
@@ -31,19 +39,18 @@ export class SpeechBubble {
     // ---- 可见状态 ----
     this._visible = false;
 
-    // ---- 弹性缩放动画 ----
+    // ---- 动画状态机 ----
+    // 状态: 'HIDDEN' | 'ENTERING' | 'BOUNCING' | 'IDLE' | 'EXITING'
+    this._animState = 'HIDDEN';
     this._scale = 0;                  // 当前缩放值
-    this._targetScale = 0;            // 目标缩放（0=隐藏，1=完全显示）
-    this._animating = false;          // 是否正在播放动画
+
+    // BOUNCING 内部的子阶段
+    this._bouncePhase = 'overshoot';  // 'overshoot' | 'bounceback' | 'settle'
 
     // ---- 显示时长计时 ----
     this._durationTimer = 0;          // 已显示时间（ms）
     this._duration = 0;               // 总显示时长（ms）
     this._callbackOnHide = null;      // 隐藏后的回调
-
-    // ---- 三角形指示器参数 ----
-    this._triangleWidth = 14;
-    this._triangleHeight = 10;
   }
 
   /**
@@ -58,13 +65,14 @@ export class SpeechBubble {
     this._durationTimer = 0;
     this._callbackOnHide = onHide;
 
-    // 计算文字换行和气泡高度
+    // 计算文字换行
     this._wrapText();
 
-    // 启动弹性缩放动画（从 0 → 1）
+    // 启动弹性缩放动画（从 0 → 弹跳 → 1）
     this._visible = true;
-    this._targetScale = 1;
-    this._animating = true;
+    this._animState = 'ENTERING';
+    this._bouncePhase = 'overshoot';
+    this._scale = 0;
   }
 
   /**
@@ -72,10 +80,7 @@ export class SpeechBubble {
    */
   hide() {
     if (!this._visible && this._scale === 0) return;
-
-    // 反向弹性缩放（从当前 → 0）
-    this._targetScale = 0;
-    this._animating = true;
+    this._animState = 'EXITING';
   }
 
   /**
@@ -83,18 +88,80 @@ export class SpeechBubble {
    * @param {number} dt - 距上一帧的时间间隔（秒）
    */
   update(dt) {
-    // ---- 弹性缩放动画 ----
-    if (this._animating) {
-      this._updateScaleAnimation(dt);
-    }
+    switch (this._animState) {
+      case 'ENTERING':
+        // 0 → 0.8（快速弹出）
+        this._scale += dt * 4;
+        if (this._scale >= 0.8) {
+          this._scale = 0.8;
+          this._animState = 'BOUNCING';
+          this._bouncePhase = 'overshoot';
+        }
+        break;
 
-    // ---- 显示时长倒计时 ----
-    if (this._visible && this._scale >= 0.99 && !this._animating) {
-      this._durationTimer += dt * 1000;
-      if (this._durationTimer >= this._duration) {
-        // 倒计时结束，自动隐藏
-        this.hide();
-      }
+      case 'BOUNCING':
+        this._updateBouncing(dt);
+        break;
+
+      case 'IDLE':
+        // 稳定显示，倒计时
+        this._durationTimer += dt * 1000;
+        if (this._durationTimer >= this._duration) {
+          this.hide();
+        }
+        break;
+
+      case 'EXITING':
+        // 缩小消失
+        this._scale -= dt * 4;
+        if (this._scale <= 0) {
+          this._scale = 0;
+          this._visible = false;
+          this._animState = 'HIDDEN';
+          this._text = '';
+          this._textLines = [];
+          this._durationTimer = 0;
+          if (this._callbackOnHide) {
+            this._callbackOnHide();
+            this._callbackOnHide = null;
+          }
+        }
+        break;
+    }
+  }
+
+  /**
+   * BOUNCING 状态内部的三阶段弹跳逻辑
+   * overshoot: 0.8 → 1.05（过冲）
+   * bounceback: 1.05 → 0.97（回弹）
+   * settle: 0.97 → 1.0（稳定）
+   */
+  _updateBouncing(dt) {
+    switch (this._bouncePhase) {
+      case 'overshoot':
+        this._scale += dt * 1.5;
+        if (this._scale >= 1.05) {
+          this._scale = 1.05;
+          this._bouncePhase = 'bounceback';
+        }
+        break;
+
+      case 'bounceback':
+        this._scale -= dt * 2.5;
+        if (this._scale <= 0.97) {
+          this._scale = 0.97;
+          this._bouncePhase = 'settle';
+        }
+        break;
+
+      case 'settle':
+        this._scale += dt * 3;
+        if (this._scale >= 1.0) {
+          this._scale = 1.0;
+          this._animState = 'IDLE';
+          this._bouncePhase = 'overshoot';
+        }
+        break;
     }
   }
 
@@ -107,47 +174,62 @@ export class SpeechBubble {
     if (!this._visible && this._scale === 0) return;
 
     const ctx = this.ctx;
-    const bw = this._bubbleWidth;
-    const bh = this._bubbleHeight + this._triangleHeight;
 
-    // 气泡位置（相对于宠物）
-    const bx = petX + 100 - bw / 2;
-    const by = petY - bh - 15;
+    // ---- 动态计算气泡高度 ----
+    const textHeight = this._textLines.length * this._lineHeight;
+    const bubbleBodyHeight = this._paddingTop + textHeight + this._paddingBottom;
+    const totalHeight = bubbleBodyHeight + this._triangleHeight;
+    const bw = this._bubbleWidth;
+
+    // ---- 气泡定位 ----
+    // 气泡始终从 Canvas 顶部开始，与宠物头部区域重叠
+    const bx = Math.floor(petX + 100 - bw / 2);
+    const by = 0;
 
     ctx.save();
 
-    // ---- 弹性缩放变换 ----
-    const cx = bx + bw / 2;
-    const cy = by + (bh - this._triangleHeight) / 2;
+    // ---- 弹性缩放变换（以气泡矩形中心为原点） ----
+    const cx = Math.floor(bx + bw / 2);
+    const cy = Math.floor(by + bubbleBodyHeight / 2);
     ctx.translate(cx, cy);
     ctx.scale(this._scale, this._scale);
     ctx.translate(-cx, -cy);
 
-    // ---- 绘制圆角矩形 ----
-    const rectW = bw;
-    const rectH = this._bubbleHeight;
-    const radius = 8;
+    // 关闭抗锯齿以保持像素风格（对 drawImage 生效）
+    ctx.imageSmoothingEnabled = false;
 
+    // ---- 像素阴影（向右下各偏移 1px） ----
+    ctx.fillStyle = '#000000';
+    ctx.fillRect(bx + 1, by + 1, bw, bubbleBodyHeight);
+
+    // ---- 绘制气泡主体（白色矩形 + 2px 黑色边框） ----
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(bx, by, bw, bubbleBodyHeight);
+
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bubbleBodyHeight);
+
+    // ---- 绘制底部三角形指示器（指向下方） ----
+    const triCenterX = Math.floor(bx + bw / 2);
+    const triTop = by + bubbleBodyHeight;  // 与气泡底部无缝连接
+    const triTip = triTop + this._triangleHeight;
+    const triHalf = Math.floor(this._triangleWidth / 2);
+
+    // 填充三角形（白色实心）
     ctx.beginPath();
-    ctx.moveTo(bx + radius, by);
-    ctx.lineTo(bx + rectW - radius, by);
-    ctx.quadraticCurveTo(bx + rectW, by, bx + rectW, by + radius);
-    ctx.lineTo(bx + rectW, by + rectH - radius);
-    ctx.quadraticCurveTo(bx + rectW, by + rectH, bx + rectW - radius, by + rectH);
-    ctx.lineTo(bx + (rectW + this._triangleWidth) / 2, by + rectH);
-    ctx.lineTo(bx + rectW / 2, by + rectH + this._triangleHeight);
-    ctx.lineTo(bx + (rectW - this._triangleWidth) / 2, by + rectH);
-    ctx.lineTo(bx + radius, by + rectH);
-    ctx.quadraticCurveTo(bx, by + rectH, bx, by + rectH - radius);
-    ctx.lineTo(bx, by + radius);
-    ctx.quadraticCurveTo(bx, by, bx + radius, by);
+    ctx.moveTo(triCenterX - triHalf, triTop);
+    ctx.lineTo(triCenterX + triHalf, triTop);
+    ctx.lineTo(triCenterX, triTip);
     ctx.closePath();
-
-    // 填充白色
     ctx.fillStyle = '#ffffff';
     ctx.fill();
 
-    // 黑色 2px 边框
+    // 描边三角形左边和右边（2px 黑色），顶部边不描边（与气泡主体连接）
+    ctx.beginPath();
+    ctx.moveTo(triCenterX - triHalf, triTop);
+    ctx.lineTo(triCenterX, triTip);
+    ctx.lineTo(triCenterX + triHalf, triTop);
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -155,15 +237,16 @@ export class SpeechBubble {
     // ---- 绘制文字 ----
     if (this._textLines.length > 0) {
       ctx.font = this._font;
-      ctx.fillStyle = '#000000';
-      ctx.textAlign = 'left';
+      ctx.fillStyle = '#1a1a2e';
+      ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
 
-      const textX = bx + this._paddingX;
-      const lineHeight = 18;
-      this._textLines.forEach((line, i) => {
-        ctx.fillText(line, textX, by + this._paddingY + i * lineHeight);
-      });
+      const textCenterX = Math.floor(bx + bw / 2);
+      for (let i = 0; i < this._textLines.length; i++) {
+        const line = this._textLines[i];
+        const lineY = Math.floor(by + this._paddingTop + i * this._lineHeight);
+        ctx.fillText(line, textCenterX, lineY);
+      }
     }
 
     ctx.restore();
@@ -180,62 +263,17 @@ export class SpeechBubble {
   // ========== 内部方法 ==========
 
   /**
-   * 更新弹性缩放动画
-   * 动画曲线：0.8 → 1.05 → 1.0（弹性过渡效果）
-   * @param {number} dt
-   */
-  _updateScaleAnimation(dt) {
-    if (this._targetScale === 0) {
-      // 隐藏动画：快速缩到 0
-      this._scale -= dt * 4;
-      if (this._scale <= 0) {
-        this._scale = 0;
-        this._animating = false;
-        this._visible = false;
-        this._text = '';
-        this._textLines = [];
-        this._durationTimer = 0;
-        if (this._callbackOnHide) {
-          this._callbackOnHide();
-          this._callbackOnHide = null;
-        }
-      }
-      return;
-    }
-
-    if (this._targetScale === 1) {
-      // 显示动画：三段式弹性缩放
-      if (this._scale < 0.8) {
-        // 第一阶段：0 → 0.8（快速）
-        this._scale += dt * 4;
-        if (this._scale > 0.8) this._scale = 0.8;
-      } else if (this._scale < 1.05) {
-        // 第二阶段：0.8 → 1.05（减速）
-        this._scale += dt * 1.5;
-        if (this._scale > 1.05) this._scale = 1.05;
-      } else if (this._scale > 1.0) {
-        // 第三阶段：1.05 → 1.0（回弹稳定）
-        this._scale += dt * -0.5;
-        if (this._scale < 1.0) {
-          this._scale = 1.0;
-          this._animating = false;
-        }
-      }
-    }
-  }
-
-  /**
    * 根据文字内容自动换行并计算气泡高度
+   * 逐字符测量宽度，超出可用宽度时换行
    */
   _wrapText() {
     const ctx = this.ctx;
     ctx.save();
     ctx.font = this._font;
 
-    const maxTextWidth = this._bubbleWidth - this._paddingX * 2;
-    const words = this._text.split('');
+    const maxTextWidth = this._bubbleWidth - this._paddingLeft - this._paddingRight;
+    const lines = [];
     let currentLine = '';
-    this._textLines = [];
 
     for (let i = 0; i < this._text.length; i++) {
       const char = this._text[i];
@@ -244,21 +282,17 @@ export class SpeechBubble {
       const testWidth = metrics.width;
 
       if (testWidth > maxTextWidth && currentLine !== '') {
-        this._textLines.push(currentLine);
+        lines.push(currentLine);
         currentLine = char;
       } else {
         currentLine = testLine;
       }
     }
     if (currentLine) {
-      this._textLines.push(currentLine);
+      lines.push(currentLine);
     }
 
     ctx.restore();
-
-    // 计算气泡高度
-    const lineHeight = 18;
-    const textHeight = this._textLines.length * lineHeight;
-    this._bubbleHeight = Math.max(textHeight + this._paddingY * 2, 30);
+    this._textLines = lines;
   }
 }
