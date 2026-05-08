@@ -1,11 +1,10 @@
 /**
  * renderer.js
  * 渲染进程入口文件
- * 负责 Canvas 初始化、状态机驱动、动画引擎和渲染循环
+ * 负责 Canvas 初始化、宠物实例创建、鼠标交互集成和游戏循环
  */
-
-import { SpriteAnimator } from './SpriteAnimator.js';
-import { PetStateMachine } from './PetStateMachine.js';
+import { Pet } from './Pet.js';
+import { Interaction } from './Interaction.js';
 import { SPRITESHEET_PATH } from './const.js';
 
 // 获取 Canvas 元素和 2D 上下文
@@ -15,14 +14,15 @@ const ctx = canvas.getContext('2d');
 // 禁用图像平滑，确保像素渲染锐利
 ctx.imageSmoothingEnabled = false;
 
-// 创建精灵动画引擎实例
-const animator = new SpriteAnimator(ctx);
+// 创建宠物实体（外观模式：整合 animator + fsm）
+const pet = new Pet(ctx);
 
-// 创建状态机实例
-const fsm = new PetStateMachine(animator);
+// 创建鼠标交互实例（通过 preload.js 的 contextBridge 暴露的 electronAPI）
+const interaction = new Interaction(pet, canvas, window.electronAPI);
+interaction.init();
 
 // 监听状态变化（用于调试）
-fsm.on('stateChange', ({ from, to }) => {
+pet._fsm.on('stateChange', ({ from, to }) => {
   console.log(`[StateMachine] ${from ?? '(null)'} → ${to}`);
 });
 
@@ -31,15 +31,12 @@ fsm.on('stateChange', ({ from, to }) => {
  */
 async function init() {
   try {
-    await animator.loadSpritesheet(SPRITESHEET_PATH);
+    await pet.init(SPRITESHEET_PATH);
     console.log('[渲染进程] 精灵图加载成功');
   } catch (err) {
     console.error('[渲染进程] 精灵图加载失败:', err.message);
     // 即使加载失败也继续，避免白屏（但不会渲染任何内容）
   }
-
-  // 通过状态机进入待机状态
-  fsm.transition('idle');
 
   // 启动游戏循环
   requestAnimationFrame(gameLoop);
@@ -55,24 +52,24 @@ function gameLoop(timestamp) {
   const dt = (timestamp - lastTime) / 1000; // 转为秒
   lastTime = timestamp;
 
-  // 更新状态机（驱动状态内部逻辑，例如一次性动画结束检测、定时器）
-  fsm.update(dt);
+  // 更新宠物（内部驱动状态机 + 动画帧）
+  pet.update(dt);
 
-  // 更新动画帧（由 animator 根据当前动画配置推进帧索引）
-  animator.update(dt);
+  // 更新交互逻辑（释放回中动画、LIFTED 摇摆效果等）
+  interaction.update(dt);
 
   // 清空 Canvas（透明背景，适配 Electron 透明窗口）
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 在原点绘制宠物（宠物 200×200 填满整个 200×200 Canvas）
-  animator.render(0, 0, false);
+  // 渲染宠物当前帧
+  pet.render();
 
   // 继续下一帧
   requestAnimationFrame(gameLoop);
 }
 
 // 暴露到 window 方便控制台手动测试
-window.fsm = fsm;
+window.pet = pet;
 
 // 启动
 init();

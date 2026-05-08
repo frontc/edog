@@ -1,4 +1,4 @@
-const { app, BrowserWindow, screen } = require('electron');
+const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
 
 let mainWindow = null;
@@ -42,6 +42,29 @@ function createWindow() {
 
   // 开发环境可开启 DevTools（注释掉以保持窗口纯净）
   // mainWindow.webContents.openDevTools();
+
+  // ========== IPC 消息处理 ==========
+
+  /**
+   * move-window：根据偏移量移动窗口位置
+   * 用于渲染进程拖动宠物时同步移动窗口
+   */
+  ipcMain.on('move-window', (_event, { dx, dy }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [winX, winY] = mainWindow.getPosition();
+      mainWindow.setPosition(winX + Math.round(dx), winY + Math.round(dy));
+    }
+  });
+
+  /**
+   * set-ignore-mouse-events：设置鼠标事件穿透
+   * 用于步骤 4.2 实现穿透交互（宠物空闲时鼠标穿透窗口，点击时恢复交互）
+   */
+  ipcMain.on('set-ignore-mouse-events', (_event, ignore) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setIgnoreMouseEvents(ignore, { forward: true });
+    }
+  });
 }
 
 app.whenReady().then(() => {
