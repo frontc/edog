@@ -12,8 +12,8 @@ import { STATES } from './const.js';
 // key = 当前状态，value = 允许转换到的状态集合
 const TRANSITIONS = {
   [STATES.IDLE]:    new Set([STATES.WALKING, STATES.LIFTED, STATES.PETTED, STATES.POKED]),
-  [STATES.WALKING]: new Set([STATES.IDLE, STATES.POUNCING]),
-  [STATES.POUNCING]: new Set([STATES.IDLE]),   // 自动转 idle
+  [STATES.WALKING]: new Set([STATES.IDLE, STATES.POUNCING, STATES.LIFTED, STATES.PETTED, STATES.POKED]),
+  [STATES.POUNCING]: new Set([STATES.IDLE, STATES.LIFTED]),   // 自动转 idle，可被 LIFTED 打断
   [STATES.LIFTED]:  new Set([STATES.IDLE]),
   [STATES.PETTED]:  new Set([STATES.IDLE]),     // 自动转 idle
   [STATES.POKED]:   new Set([STATES.IDLE]),     // 自动转 idle

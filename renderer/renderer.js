@@ -1,10 +1,11 @@
 /**
  * renderer.js
  * 渲染进程入口文件
- * 负责 Canvas 初始化、宠物实例创建、鼠标交互集成和游戏循环
+ * 负责 Canvas 初始化、宠物实例创建、鼠标交互集成、行为管理和游戏循环
  */
 import { Pet } from './Pet.js';
 import { Interaction } from './Interaction.js';
+import { BehaviorManager } from './BehaviorManager.js';
 import { SPRITESHEET_PATH } from './const.js';
 
 // 获取 Canvas 元素和 2D 上下文
@@ -20,6 +21,9 @@ const pet = new Pet(ctx);
 // 创建鼠标交互实例（通过 preload.js 的 contextBridge 暴露的 electronAPI）
 const interaction = new Interaction(pet, canvas, window.electronAPI);
 interaction.init();
+
+// 创建行为管理器（管理散步、扑击等自发行为）
+const behaviorManager = new BehaviorManager(pet);
 
 // 监听状态变化（用于调试）
 pet._fsm.on('stateChange', ({ from, to }) => {
@@ -58,6 +62,9 @@ function gameLoop(timestamp) {
   // 更新交互逻辑（释放回中动画、LIFTED 摇摆效果等）
   interaction.update(dt);
 
+  // 更新行为管理器（散步逻辑、扑击等）
+  behaviorManager.update(dt);
+
   // 清空 Canvas（透明背景，适配 Electron 透明窗口）
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -70,6 +77,7 @@ function gameLoop(timestamp) {
 
 // 暴露到 window 方便控制台手动测试
 window.pet = pet;
+window.behaviorManager = behaviorManager;
 
 // 启动
 init();

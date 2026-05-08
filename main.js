@@ -57,6 +57,38 @@ function createWindow() {
   });
 
   /**
+   * move-window-to：将窗口移动到绝对坐标
+   * 用于散步行为中平滑移动窗口
+   */
+  ipcMain.on('move-window-to', (_event, { x, y }) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setPosition(Math.round(x), Math.round(y));
+    }
+  });
+
+  /**
+   * get-screen-size：返回主屏幕 workArea 尺寸
+   * 用于 BehaviorManager 计算随机散步目标
+   */
+  ipcMain.handle('get-screen-size', () => {
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width, height } = primaryDisplay.workAreaSize;
+    return { width, height };
+  });
+
+  /**
+   * get-window-position：返回当前窗口位置
+   * 用于 BehaviorManager 获取散步起始点
+   */
+  ipcMain.handle('get-window-position', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const [x, y] = mainWindow.getPosition();
+      return { x, y };
+    }
+    return { x: 0, y: 0 };
+  });
+
+  /**
    * set-ignore-mouse-events：设置鼠标事件穿透
    * 用于步骤 4.2 实现穿透交互（宠物空闲时鼠标穿透窗口，点击时恢复交互）
    */
