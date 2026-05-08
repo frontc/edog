@@ -7,7 +7,7 @@ import { Pet } from './Pet.js';
 import { Interaction } from './Interaction.js';
 import { BehaviorManager } from './BehaviorManager.js';
 import { SpeechBubble } from './SpeechBubble.js';
-import { SPRITESHEET_PATH, REMINDERS } from './const.js';
+import { SPRITESHEET_PATH, REMINDERS, STATES } from './const.js';
 
 // 获取 Canvas 元素和 2D 上下文
 const canvas = document.getElementById('gameCanvas');
@@ -58,6 +58,17 @@ window.electronAPI.onReminder((type) => {
   handleReminder(type);
 });
 
+// 监听托盘点击事件（打招呼动画）
+window.electronAPI.onTrayClick((data) => {
+  if (data && data.action === 'greet') {
+    console.log('[渲染进程] 托盘点击 → 打招呼');
+    // 如果宠物处于 IDLE 状态，短暂切换到 POUNCING 作为打招呼
+    if (pet._fsm.currentState === STATES.IDLE) {
+      // 使用 POUNCING 状态播放一次扑动画，自然结束后回到 IDLE
+      pet._fsm.transition(STATES.POUNCING);
+    }
+  }
+});
 
 // 监听状态变化（用于调试）
 pet._fsm.on('stateChange', ({ from, to }) => {

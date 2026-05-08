@@ -8,6 +8,7 @@
  * - getScreenSize()              → 获取主屏幕 workArea 尺寸（返回 Promise）
  * - getWindowPosition()          → 获取当前窗口位置（返回 Promise）
  * - onReminder(callback)         → 监听主进程提醒（为步骤 6.1 预留）
+ * - onTrayClick(callback)        → 监听托盘点击事件（为步骤 7.1 预留）
  * - setIgnoreMouseEvents(ignore) → 鼠标穿透控制（为步骤 4.2 预留）
  */
 const { contextBridge, ipcRenderer } = require('electron');
@@ -45,6 +46,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
    */
   onReminder: (callback) => {
     ipcRenderer.on('reminder', (_event, type) => callback(type));
+  },
+
+  /**
+   * 监听托盘点击事件（为步骤 7.1 预留）
+   * @param {Function} callback - 回调函数，接收事件数据
+   */
+  onTrayClick: (callback) => {
+    ipcRenderer.on('tray-click', (_event, data) => callback(data));
   },
 
   /**

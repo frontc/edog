@@ -1,9 +1,11 @@
 const electron = require('electron');
-const { app, BrowserWindow, screen, ipcMain } = electron;
+const { app, BrowserWindow, screen, ipcMain, Tray, Menu, dialog } = electron;
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow = null;
+let tray = null;
+let isMuted = false;
 
 // ========== 提醒系统（步骤 6.1） ==========
 
@@ -69,6 +71,10 @@ function saveReminderState(state) {
  * @param {'stand'|'drink'} type - 提醒类型
  */
 function sendReminder(type) {
+  if (isMuted) {
+    console.log(`[提醒系统] 静音模式，跳过提醒: ${type}`);
+    return;
+  }
   if (!mainWindow || mainWindow.isDestroyed()) return;
 
   // 通过 IPC 通知渲染进程显示气泡
@@ -266,11 +272,113 @@ function createWindow() {
   });
 }
 
+/**
+ * 创建系统托盘
+ * 在 app.whenReady() 中调用（Electron 要求 Tray 在 ready 后创建）
+ */
+function createTray() {
+  const iconPath = path.join(__dirname, 'assets', 'tray-icon.png');
+  tray = new Tray(iconPath);
+
+  /**
+   * 构建右键菜单
+   * 每次调用重新构建，确保静音状态同步
+   */
+  function buildContextMenu() {
+    return Menu.buildFromTemplate([
+      {
+        label: '显示/隐藏宠物',
+        click: () => {
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow.isVisible()) {
+              mainWindow.hide();
+            } else {
+              mainWindow.show();
+            }
+          }
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '切换静音',
+        type: 'checkbox',
+        checked: isMuted,
+        click: (menuItem) => {
+          isMuted = menuItem.checked;
+          // 重建菜单（使下次右键打开时同步状态）
+          tray.setContextMenu(buildContextMenu());
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '站立提醒',
+        click: () => {
+          manualReminder('stand');
+        }
+      },
+      {
+        label: '喝水提醒',
+        click: () => {
+          manualReminder('drink');
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '关于',
+        click: () => {
+          dialog.showMessageBox({
+            type: 'info',
+            title: '关于 像素边牧',
+            message: '像素边牧 v1.0.0',
+            detail: '一只可爱的桌面电子宠物，陪伴你的工作时光。\n\n功能：\n• 站立提醒（60分钟）\n• 喝水提醒（120分钟）\n• 自动散步与扑击\n• 触摸互动（抚摸/戳/提起）'
+          });
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '退出',
+        click: () => {
+          app.quit();
+        }
+      }
+    ]);
+  }
+
+  tray.setToolTip('像素边牧');
+  tray.setContextMenu(buildContextMenu());
+
+  // 左键点击托盘图标：仅当窗口可见时发送打招呼消息，不切换窗口可见性
+  tray.on('click', () => {
+    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+      mainWindow.webContents.send('tray-click', { action: 'greet' });
+    }
+  });
+}
+
+/**
+ * 手动触发提醒（不受静音影响）
+ * @param {'stand'|'drink'} type - 提醒类型
+ */
+function manualReminder(type) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('reminder', type);
+  }
+  const timestamp = Date.now();
+  const key = type === 'stand' ? 'lastStandReminder' : 'lastDrinkReminder';
+  const state = loadReminderState() || { lastStandReminder: timestamp, lastDrinkReminder: timestamp };
+  state[key] = timestamp;
+  saveReminderState(state);
+  console.log(`[提醒系统] 手动触发提醒: ${type}`);
+}
+
 app.whenReady().then(() => {
   // 隐藏 Mac Dock 图标
   app.dock.hide();
 
   createWindow();
+
+  // 创建系统托盘（必须在 app.whenReady 之后）
+  createTray();
 
   // 初始化提醒系统
   initReminderSystem();
@@ -284,10 +392,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
-  // macOS 惯例: 非全部窗口关闭时退出应用
-  app.quit();
+  // macOS 下保持托盘运行，不退出
+  // （点击窗口关闭按钮仅隐藏窗口，不触发此事件）
 });
 
 app.on('before-quit', () => {
   clearReminderTimers();
+  // 清理托盘
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
 });

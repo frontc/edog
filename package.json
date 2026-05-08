@@ -6,6 +6,7 @@
   "scripts": {
     "start": "ELECTRON_RUN_AS_NODE= electron .",
     "dev": "ELECTRON_RUN_AS_NODE= electron .",
+    "generate-tray-icon": "node scripts/generate-tray-icon.js",
     "build": "electron-builder",
     "dist": "electron-builder",
     "dist:mac": "electron-builder --mac"
